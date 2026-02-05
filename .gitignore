@@ -1,0 +1,15 @@
+# Secrets — never commit
+.env
+.env.local
+*.env
+
+# Dependencies
+node_modules/
+
+# Build / cache
+contracts/cache/
+contracts/artifacts/
+frontend/dist/
+
+# OS
+.DS_Store

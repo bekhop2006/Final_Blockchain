@@ -1,16 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import Header from "../components/Header";
 import { useCart } from "../context/CartContext";
 import { useWallet } from "../context/WalletContext";
 import { getProductById } from "../data/catalog";
 
+// 1 бонусный токен (CDR) = 0.0001 ETH скидки в нашем приложении; макс. 20% от заказа
+const BONUS_RATE_ETH = 0.0001;
+const MAX_DISCOUNT_PERCENT = 0.2;
+
 export default function Cart() {
   const { items, setQty, remove, totalEth, clear } = useCart();
-  const { account, deliveryContract, updateBalances } = useWallet();
+  const { account, balanceToken, deliveryContract, updateBalances } = useWallet();
   const [campaignId, setCampaignId] = useState("");
+  const [useBonus, setUseBonus] = useState(true);
   const [paying, setPaying] = useState(false);
   const [txResult, setTxResult] = useState(null);
+  const navigate = useNavigate();
 
-  const totalWei = BigInt(Math.ceil(totalEth * 1e18));
+  const bonusBalance = Number(balanceToken) / 1e18;
+  const maxDiscountEth = totalEth * MAX_DISCOUNT_PERCENT;
+  const discountByBonus = bonusBalance * BONUS_RATE_ETH;
+  const discountEth = useMemo(() => {
+    if (!useBonus || totalEth <= 0) return 0;
+    return Math.min(discountByBonus, maxDiscountEth, totalEth);
+  }, [useBonus, totalEth, discountByBonus, maxDiscountEth]);
+  const payEth = totalEth - discountEth;
+  const totalWei = BigInt(Math.ceil(Math.max(0, payEth) * 1e18));
 
   const handlePay = async () => {
     if (!account || !deliveryContract || items.length === 0) return;
@@ -58,16 +74,25 @@ export default function Cart() {
 
   if (items.length === 0 && !txResult) {
     return (
-      <div>
-        <h1>Корзина</h1>
-        <p className="card">Корзина пуста. Добавьте товары из каталога.</p>
+      <div className="page page--cart">
+        <Header showSearch={false} />
+        <main className="main main--with-nav">
+          <h1 className="page-title">Корзина</h1>
+          <div className="card">
+            <p style={{ margin: 0, color: "var(--muted)" }}>Корзина пуста. Добавьте товары из каталога.</p>
+            <button className="btn btn--primary" onClick={() => navigate("/catalog")} style={{ marginTop: "1rem" }}>В каталог</button>
+          </div>
+          <div className="main__bottom-pad" />
+        </main>
       </div>
     );
   }
 
   return (
-    <div>
-      <h1>Корзина</h1>
+    <div className="page page--cart">
+      <Header showSearch={false} />
+      <main className="main main--with-nav">
+      <h1 className="page-title">Корзина</h1>
       <div className="card" style={{ marginBottom: "1rem" }}>
         <h3>Товары</h3>
         <ul style={{ listStyle: "none", padding: 0 }}>
@@ -85,19 +110,39 @@ export default function Cart() {
                   style={{ width: 60 }}
                 />
                 <span>{p.priceEth} ETH × {quantity}</span>
-                <button className="btn" style={{ background: "var(--danger)", color: "#fff" }} onClick={() => remove(productId)}>Удалить</button>
+                <button type="button" className="btn btn--danger" onClick={() => remove(productId)}>Удалить</button>
               </li>
             );
           })}
         </ul>
-        <p><strong>Итого: {totalEth.toFixed(4)} ETH</strong></p>
+        <p><strong>Сумма заказа: {totalEth.toFixed(4)} ETH</strong></p>
       </div>
+
+      {account && (
+        <div className="card bonus-card">
+          <h3>Использование бонусов в приложении</h3>
+          <p style={{ color: "var(--muted)", marginBottom: "0.75rem" }}>
+            У тебя <strong>{bonusBalance.toFixed(0)} CDR</strong> — это наши бонусные токены за прошлые оплаты. Их можно использовать здесь для скидки: 1 CDR = {BONUS_RATE_ETH} ETH (макс. 20% от заказа).
+          </p>
+          {bonusBalance > 0 && totalEth > 0 ? (
+            <label className="bonus-toggle">
+              <input type="checkbox" checked={useBonus} onChange={(e) => setUseBonus(e.target.checked)} />
+              <span>Списать бонусы на скидку</span>
+            </label>
+          ) : null}
+          {useBonus && discountEth > 0 && (
+            <p className="discount-line">
+              Скидка: −{discountEth.toFixed(4)} ETH → <strong>К оплате: {payEth.toFixed(4)} ETH</strong>
+            </p>
+          )}
+        </div>
+      )}
 
       {account && deliveryContract && (
         <div className="card">
           <h3>Оплата криптовалютой (ETH)</h3>
           <p style={{ color: "var(--muted)" }}>
-            Кэшбек NFT: заказ &lt; 0.1 ETH → 1%, ≥ 0.1 ETH → 3%, ≥ 0.5 ETH → 5%. Бонусные токены CDR начисляются автоматически.
+            Платишь ETH → получаешь бонусные токены (CDR) и NFT-кэшбек. Кэшбек: &lt; 0.1 ETH → 1%, ≥ 0.1 ETH → 3%, ≥ 0.5 ETH → 5%.
           </p>
           <div className="input-group">
             <label>Оплатить в существующую кампанию (ID, опционально)</label>
@@ -109,8 +154,8 @@ export default function Cart() {
               onChange={(e) => setCampaignId(e.target.value)}
             />
           </div>
-          <button className="btn btn-primary" onClick={campaignId === "" ? handleCreateAndPay : handlePay} disabled={paying || totalEth <= 0}>
-            {paying ? "Ожидание..." : campaignId === "" ? `Создать заказ и оплатить ${totalEth.toFixed(4)} ETH` : `Оплатить в кампанию #${campaignId}`}
+          <button type="button" className="btn btn--primary" onClick={campaignId === "" ? handleCreateAndPay : handlePay} disabled={paying || payEth <= 0}>
+            {paying ? "Ожидание..." : campaignId === "" ? `Создать заказ и оплатить ${payEth.toFixed(4)} ETH` : `Оплатить в кампанию #${campaignId} — ${payEth.toFixed(4)} ETH`}
           </button>
         </div>
       )}
@@ -119,11 +164,13 @@ export default function Cart() {
       {account && !deliveryContract && <p className="card">Выберите сеть Sepolia/Holesky и укажите адреса контрактов в .env.</p>}
 
       {txResult && (
-        <div className="card" style={{ marginTop: "1rem", background: txResult.error ? "rgba(255,107,107,0.1)" : "rgba(0,212,170,0.1)" }}>
-          {txResult.error ? <p style={{ color: "var(--danger)" }}>{txResult.error}</p> : null}
-          {txResult.success ? <p style={{ color: "var(--accent)" }}>Успешно! Hash: {txResult.hash}</p> : null}
+        <div className={`card ${txResult.error ? "card--error" : "card--success"}`}>
+          {txResult.error ? <p style={{ color: "var(--danger)", margin: 0 }}>{txResult.error}</p> : null}
+          {txResult.success ? <p style={{ color: "var(--accent)", margin: 0 }}>Успешно! Hash: {txResult.hash}</p> : null}
         </div>
       )}
+      <div className="main__bottom-pad" />
+      </main>
     </div>
   );
 }

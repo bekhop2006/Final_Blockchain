@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
+import Header from "../components/Header";
 import { useWallet } from "../context/WalletContext";
 
-const STATUS_NAMES = { 0: "Active", 1: "Ended", 2: "Success", 3: "Failed" };
+const STATUS_NAMES = { 0: "Активен", 1: "Завершён", 2: "Успех", 3: "Неудача" };
 
 export default function Campaigns() {
   const { account, deliveryContract, provider, updateBalances } = useWallet();
@@ -108,14 +109,16 @@ export default function Campaigns() {
   };
 
   return (
-    <div>
-      <h1>Заказы (кампании)</h1>
-      {!account && <p className="card">Подключите кошелёк.</p>}
-      {account && !deliveryContract && <p className="card">Переключитесь на Sepolia/Holesky и задайте адреса контрактов в .env.</p>}
+    <div className="page page--campaigns">
+      <Header showSearch={false} />
+      <main className="main main--with-nav">
+      <h1 className="page-title">Заказы</h1>
+      {!account && <div className="card"><p style={{ margin: 0 }}>Подключите кошелёк.</p></div>}
+      {account && !deliveryContract && <div className="card"><p style={{ margin: 0 }}>Переключитесь на Sepolia/Holesky и задайте адреса контрактов в .env.</p></div>}
 
       {account && deliveryContract && (
         <>
-          <button className="btn btn-primary" onClick={() => setCreateOpen(true)} style={{ marginBottom: "1rem" }}>
+          <button type="button" className="btn btn--primary" onClick={() => setCreateOpen(true)} style={{ marginBottom: "1rem" }}>
             Создать заказ (кампанию)
           </button>
           {createOpen && (
@@ -133,8 +136,8 @@ export default function Campaigns() {
                 <label>Дедлайн (минут)</label>
                 <input type="number" value={deadlineMinutes} onChange={(e) => setDeadlineMinutes(e.target.value)} />
               </div>
-              <button className="btn btn-primary" onClick={createCampaign} disabled={creating}>Создать</button>
-              <button className="btn" onClick={() => setCreateOpen(false)} style={{ marginLeft: "0.5rem" }}>Отмена</button>
+              <button type="button" className="btn btn--primary" onClick={createCampaign} disabled={creating}>Создать</button>
+              <button type="button" className="btn" onClick={() => setCreateOpen(false)} style={{ marginLeft: "0.5rem" }}>Отмена</button>
             </div>
           )}
 
@@ -148,12 +151,12 @@ export default function Campaigns() {
                   <p>Дедлайн: {new Date(c.deadline * 1000).toLocaleString()}</p>
                   <p>Статус: <strong>{STATUS_NAMES[c.status] ?? c.status}</strong></p>
                   {c.status === 0 && c.creator?.toLowerCase() === account?.toLowerCase() && c.deadline * 1000 < Date.now() && (
-                    <button className="btn btn-primary" onClick={() => finalize(c.id)} disabled={finalizing === c.id}>
+                    <button type="button" className="btn btn--primary" onClick={() => finalize(c.id)} disabled={finalizing === c.id}>
                       {finalizing === c.id ? "..." : "Завершить"}
                     </button>
                   )}
                   {c.status === 3 && (
-                    <button className="btn" style={{ background: "var(--danger)", color: "#fff" }} onClick={() => refund(c.id)} disabled={refunding === c.id}>
+                    <button type="button" className="btn btn--danger" onClick={() => refund(c.id)} disabled={refunding === c.id}>
                       {refunding === c.id ? "..." : "Вернуть средства"}
                     </button>
                   )}
@@ -163,6 +166,8 @@ export default function Campaigns() {
           )}
         </>
       )}
+      <div className="main__bottom-pad" />
+      </main>
     </div>
   );
 }
