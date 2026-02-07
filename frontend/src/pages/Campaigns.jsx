@@ -82,7 +82,7 @@ export default function Campaigns() {
     setFinalizing(id);
     try {
       await (await deliveryContract.finalize(id)).wait();
-      setCampaigns((prev) => prev.map((c) => c.id === id ? { ...c, status: 2 } : c)));
+      setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 2 } : c)));
       updateBalances();
     } catch (e) {
       console.error(e);
