@@ -3,14 +3,41 @@ import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 import { useCart } from "../context/CartContext";
 import { useWallet } from "../context/WalletContext";
+import { useAuth } from "../context/AuthContext";
 import { getProductById } from "../data/catalog";
+import { getProductPhotoUrl } from "../data/productPhotos";
+import { API_BASE_URL } from "../config";
+import { ProductIcon } from "../components/Icons";
 
 // 1 бонусный токен (CDR) = 0.0001 ETH скидки в нашем приложении; макс. 20% от заказа
 const BONUS_RATE_ETH = 0.0001;
 const MAX_DISCOUNT_PERCENT = 0.2;
 
+function formatEth(value) {
+  const n = Number(value);
+  if (n >= 0.01) return n.toFixed(4);
+  if (n >= 0.0001) return n.toFixed(6);
+  return n.toFixed(8);
+}
+
+async function saveOrder(token, { items, totalEth, campaignId, txHash }) {
+  const res = await fetch(`${API_BASE_URL}/api/orders`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ items, totalEth, campaignId, txHash }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Не удалось сохранить заказ");
+  }
+}
+
 export default function Cart() {
   const { items, setQty, remove, totalEth, clear } = useCart();
+  const { token } = useAuth();
   const { account, balanceToken, deliveryContract, updateBalances } = useWallet();
   const [campaignId, setCampaignId] = useState("");
   const [useBonus, setUseBonus] = useState(true);
@@ -30,6 +57,10 @@ export default function Cart() {
 
   const handlePay = async () => {
     if (!account || !deliveryContract || items.length === 0) return;
+    if (totalWei === 0n) {
+      setTxResult({ error: "Сумма к оплате не может быть нулевой. Добавьте товары или отключите скидку бонусами." });
+      return;
+    }
     const cId = campaignId === "" ? 0 : parseInt(campaignId, 10);
     if (isNaN(cId) || cId < 0) {
       setTxResult({ error: "Укажите ID кампании или оставьте пустым для «Создать заказ и оплатить»." });
@@ -40,11 +71,24 @@ export default function Cart() {
     try {
       const tx = await deliveryContract.contribute(cId, { value: totalWei });
       await tx.wait();
+      if (token) {
+        try {
+          await saveOrder(token, { items, totalEth, campaignId: cId, txHash: tx.hash });
+        } catch (saveErr) {
+          console.warn("Order save failed:", saveErr);
+        }
+      }
       setTxResult({ success: true, hash: tx.hash });
       clear();
       updateBalances();
     } catch (e) {
-      setTxResult({ error: e.message || "Транзакция отклонена" });
+      const msg = e.message || "";
+      const isRevert = msg.includes("revert") || msg.includes("CALL_EXCEPTION") || msg.includes("execution reverted");
+      setTxResult({
+        error: isRevert
+          ? "Транзакция отклонена контрактом. Убедитесь, что после деплоя вы выполнили в папке contracts: npm run transfer-ownership (передача владения токенов контракту доставки)."
+          : msg || "Транзакция отклонена",
+      });
     } finally {
       setPaying(false);
     }
@@ -52,6 +96,10 @@ export default function Cart() {
 
   const handleCreateAndPay = async () => {
     if (!account || !deliveryContract || items.length === 0) return;
+    if (totalWei === 0n) {
+      setTxResult({ error: "Сумма к оплате не может быть нулевой. Добавьте товары или отключите скидку бонусами." });
+      return;
+    }
     setPaying(true);
     setTxResult(null);
     try {
@@ -62,11 +110,24 @@ export default function Cart() {
       const newId = Number(count) - 1;
       const contribTx = await deliveryContract.contribute(newId, { value: totalWei });
       await contribTx.wait();
+      if (token) {
+        try {
+          await saveOrder(token, { items, totalEth, campaignId: newId, txHash: contribTx.hash });
+        } catch (saveErr) {
+          console.warn("Order save failed:", saveErr);
+        }
+      }
       setTxResult({ success: true, hash: contribTx.hash });
       clear();
       updateBalances();
     } catch (e) {
-      setTxResult({ error: e.message || "Транзакция отклонена" });
+      const msg = e.message || "";
+      const isRevert = msg.includes("revert") || msg.includes("CALL_EXCEPTION") || msg.includes("execution reverted");
+      setTxResult({
+        error: isRevert
+          ? "Транзакция отклонена контрактом. Убедитесь, что после деплоя вы выполнили в папке contracts: npm run transfer-ownership (передача владения токенов контракту доставки)."
+          : msg || "Транзакция отклонена",
+      });
     } finally {
       setPaying(false);
     }
@@ -93,71 +154,98 @@ export default function Cart() {
       <Header showSearch={false} />
       <main className="main main--with-nav">
       <h1 className="page-title">Корзина</h1>
-      <div className="card" style={{ marginBottom: "1rem" }}>
-        <h3>Товары</h3>
-        <ul style={{ listStyle: "none", padding: 0 }}>
+
+      <section className="card cart-section cart-section--items">
+        <h2 className="cart-section__title">Товары</h2>
+        <ul className="cart-items">
           {items.map(({ productId, quantity }) => {
             const p = getProductById(productId);
             if (!p) return null;
+            const photoUrl = getProductPhotoUrl(productId);
             return (
-              <li key={productId} style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
-                <span>{p.image} {p.name}</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={quantity}
-                  onChange={(e) => setQty(productId, parseInt(e.target.value, 10) || 0)}
-                  style={{ width: 60 }}
-                />
-                <span>{p.priceEth} ETH × {quantity}</span>
-                <button type="button" className="btn btn--danger" onClick={() => remove(productId)}>Удалить</button>
+              <li key={productId} className="cart-item">
+                <span className="cart-item__icon">
+                  {photoUrl ? (
+                    <img src={photoUrl} alt="" className="cart-item__img" />
+                  ) : (
+                    <ProductIcon iconKey={p.icon} width={28} height={28} />
+                  )}
+                </span>
+                <span className="cart-item__name">{p.name}</span>
+                <div className="cart-item__qty-wrap">
+                  <input
+                    type="number"
+                    min={1}
+                    className="cart-item__qty"
+                    value={quantity}
+                    onChange={(e) => setQty(productId, parseInt(e.target.value, 10) || 0)}
+                  />
+                </div>
+                <span className="cart-item__price">{p.priceEth} ETH × {quantity}</span>
+                <button type="button" className="btn btn--danger btn--sm cart-item__remove" onClick={() => remove(productId)}>Удалить</button>
               </li>
             );
           })}
         </ul>
-        <p><strong>Сумма заказа: {totalEth.toFixed(4)} ETH</strong></p>
-      </div>
+        <p className="cart-section__total">Сумма заказа: <strong>{formatEth(totalEth)} ETH</strong></p>
+      </section>
 
       {account && (
-        <div className="card bonus-card">
-          <h3>Использование бонусов в приложении</h3>
-          <p style={{ color: "var(--muted)", marginBottom: "0.75rem" }}>
-            У тебя <strong>{bonusBalance.toFixed(0)} CDR</strong> — это наши бонусные токены за прошлые оплаты. Их можно использовать здесь для скидки: 1 CDR = {BONUS_RATE_ETH} ETH (макс. 20% от заказа).
-          </p>
-          {bonusBalance > 0 && totalEth > 0 ? (
-            <label className="bonus-toggle">
-              <input type="checkbox" checked={useBonus} onChange={(e) => setUseBonus(e.target.checked)} />
-              <span>Списать бонусы на скидку</span>
-            </label>
-          ) : null}
-          {useBonus && discountEth > 0 && (
-            <p className="discount-line">
-              Скидка: −{discountEth.toFixed(4)} ETH → <strong>К оплате: {payEth.toFixed(4)} ETH</strong>
+        <section className="card cart-section bonus-card">
+          <h2 className="cart-section__title">Бонусы</h2>
+          {bonusBalance > 0 ? (
+            <>
+              <p className="cart-bonus__balance">
+                На балансе <strong>{bonusBalance.toFixed(0)} CDR</strong>. Можно списать на скидку (макс. 20% от заказа).
+              </p>
+              <label className="bonus-toggle">
+                <input type="checkbox" checked={useBonus} onChange={(e) => setUseBonus(e.target.checked)} />
+                <span>Использовать бонусы для скидки</span>
+              </label>
+              {useBonus && discountEth > 0 && (
+                <p className="discount-line">
+                  Скидка <strong>{formatEth(discountEth)} ETH</strong> → к оплате <strong>{formatEth(payEth)} ETH</strong>
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="cart-bonus__info">
+              После оплаты вы получите 15% от заказа бонусами (CDR) и NFT-кэшбек — их можно использовать для скидки в следующих заказах.
             </p>
           )}
-        </div>
+        </section>
       )}
 
       {account && deliveryContract && (
-        <div className="card">
-          <h3>Оплата криптовалютой (ETH)</h3>
-          <p style={{ color: "var(--muted)" }}>
-            Платишь ETH → получаешь бонусные токены (CDR) и NFT-кэшбек. Кэшбек: &lt; 0.1 ETH → 1%, ≥ 0.1 ETH → 3%, ≥ 0.5 ETH → 5%.
+        <section className="card cart-section payment-card">
+          <h2 className="cart-section__title">Оплата ETH</h2>
+          <p className="payment-summary">
+            К оплате: <strong>{formatEth(payEth)} ETH</strong>
           </p>
-          <div className="input-group">
-            <label>Оплатить в существующую кампанию (ID, опционально)</label>
-            <input
-              type="number"
-              min={0}
-              placeholder="Оставьте пустым для «Создать заказ и оплатить»"
-              value={campaignId}
-              onChange={(e) => setCampaignId(e.target.value)}
-            />
-          </div>
-          <button type="button" className="btn btn--primary" onClick={campaignId === "" ? handleCreateAndPay : handlePay} disabled={paying || payEth <= 0}>
-            {paying ? "Ожидание..." : campaignId === "" ? `Создать заказ и оплатить ${payEth.toFixed(4)} ETH` : `Оплатить в кампанию #${campaignId} — ${payEth.toFixed(4)} ETH`}
+          <p className="payment-steps">
+            1. Нажмите кнопку ниже<br />
+            2. Подтвердите платёж в MetaMask
+          </p>
+          <p className="payment-note">
+            За эту оплату вы получите 15% от суммы бонусными токенами CDR и NFT-кэшбек в кошелёк.
+          </p>
+          <details className="payment-advanced">
+            <summary>Привязать к существующему заказу</summary>
+            <div className="input-group">
+              <label>Номер заказа (ID)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="Оставьте пустым — создастся новый заказ"
+                value={campaignId}
+                onChange={(e) => setCampaignId(e.target.value)}
+              />
+            </div>
+          </details>
+          <button type="button" className="btn btn--primary btn--pay" onClick={campaignId === "" ? handleCreateAndPay : handlePay} disabled={paying || payEth <= 0 || totalWei === 0n}>
+            {paying ? "Подтвердите в MetaMask…" : `Оплатить ${formatEth(payEth)} ETH`}
           </button>
-        </div>
+        </section>
       )}
 
       {!account && <p className="card">Подключите кошелёк для оплаты.</p>}
