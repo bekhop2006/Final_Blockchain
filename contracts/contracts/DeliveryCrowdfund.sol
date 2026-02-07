@@ -72,8 +72,8 @@ contract DeliveryCrowdfund {
         c.contributions[msg.sender] += msg.value;
         c.totalContributed += msg.value;
 
-        // Начисление ERC20: 1 wei = 1 токен (можно изменить коэффициент)
-        uint256 rewardAmount = msg.value;
+        // Начисление бонусных токенов CDR: 15% от суммы заказа
+        uint256 rewardAmount = (msg.value * 15) / 100;
         rewardToken.mint(msg.sender, rewardAmount);
 
         // NFT кэшбек: < 0.1 ETH -> 1%, >= 0.1 ETH -> 3%, >= 0.5 ETH -> 5%
