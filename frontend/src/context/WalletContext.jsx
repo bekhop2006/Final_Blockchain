@@ -65,6 +65,20 @@ export function WalletProvider({ children }) {
     }
   }, []);
 
+  const disconnect = useCallback(() => {
+    setAccount(null);
+    setChainId(null);
+    setBalanceEth("0");
+    setBalanceToken("0");
+    setNftCount(0);
+    setProvider(null);
+    setSigner(null);
+    setDeliveryContract(null);
+    setRewardTokenContract(null);
+    setCashbackNFTContract(null);
+    setError(null);
+  }, []);
+
   const switchNetwork = useCallback(async () => {
     if (!window.ethereum || !SUPPORTED_CHAIN_IDS[0]) return;
     try {
@@ -119,6 +133,7 @@ export function WalletProvider({ children }) {
     isCorrectNetwork,
     chainName: chainId ? CHAIN_NAMES[Number(chainId)] : null,
     connect,
+    disconnect,
     switchNetwork,
     updateBalances,
   };

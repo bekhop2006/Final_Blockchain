@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useWallet } from "../context/WalletContext";
+import { IconPackage, IconSearch } from "./Icons";
 
 function formatBonusTokens(wei) {
   const n = Number(wei) / 1e18;
@@ -15,7 +16,7 @@ export default function Header({ searchQuery = "", onSearchChange, showSearch = 
     <header className="header header--delivery">
       <div className="header__top">
         <Link to="/" className="header__logo">
-          <span className="header__logo-icon">📦</span>
+          <span className="header__logo-icon"><IconPackage width={22} height={22} /></span>
           <span>Crypto Delivery</span>
         </Link>
         {!account ? (
@@ -38,7 +39,7 @@ export default function Header({ searchQuery = "", onSearchChange, showSearch = 
       </div>
       {showSearch && (
         <div className={`header__search-wrap ${searchFocused ? "header__search-wrap--focused" : ""}`}>
-          <span className="header__search-icon">🔍</span>
+          <span className="header__search-icon"><IconSearch width={20} height={20} /></span>
           <input
             type="text"
             className="header__search"

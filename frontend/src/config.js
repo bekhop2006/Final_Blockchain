@@ -12,6 +12,8 @@ export const CHAIN_NAMES = {
 // Replace with your deployed addresses after running: npm run deploy (in contracts/)
 const env = (key) => import.meta.env[key] || "";
 
+export const API_BASE_URL = env("VITE_API_URL") || "http://localhost:3001";
+
 export const CONTRACT_ADDRESSES = {
   [SEPOLIA_CHAIN_ID]: {
     deliveryCrowdfund: env("VITE_DELIVERY_ADDRESS"),
