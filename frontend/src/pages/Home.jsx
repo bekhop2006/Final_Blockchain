@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 import ProductCard from "../components/ProductCard";
+import BannerCarousel from "../components/BannerCarousel";
 import { CATEGORIES, PRODUCTS } from "../data/catalog";
 
 export default function Home() {
@@ -21,12 +22,7 @@ export default function Home() {
     <div className="page page--home">
       <Header searchQuery={search} onSearchChange={setSearch} showSearch />
       <main className="main main--with-nav">
-        <section className="banner banner--promo">
-          <div className="banner__content">
-            <h2 className="banner__title">Оплати ETH — получи бонусы</h2>
-            <p className="banner__text">Кэшбек NFT и токены CDR за каждый заказ. Используй бонусы для скидок.</p>
-          </div>
-        </section>
+        <BannerCarousel />
 
         <section className="section">
           <h2 className="section__title">Что заказать</h2>

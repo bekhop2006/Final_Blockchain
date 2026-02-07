@@ -41,7 +41,7 @@ export default function Catalog() {
             ))}
           </select>
         </div>
-        <p className="catalog-hint">Оплачиваешь ETH → получаешь бонусы (CDR) и NFT-кэшбек. Бонусы можно тратить на скидки.</p>
+        <p className="catalog-hint">Оплачиваешь ETH → получаешь 15% от заказа бонусами (CDR) и NFT-кэшбек. Бонусы можно тратить на скидки.</p>
         <div className="products-grid products-grid--catalog">
           {filtered.map((p) => (
             <ProductCard key={p.id} product={p} noNavigate />
